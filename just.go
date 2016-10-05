@@ -10,7 +10,10 @@ func doCatch(ptr *error, f func(error) error, r interface{}) {
 	switch r.(type) {
 	case nil:
 	case _Err:
-		*ptr = f(r.(_Err).error)
+		err := f(r.(_Err).error)
+		if ptr != nil {
+			*ptr = err
+		}
 	default:
 		panic(r)
 	}

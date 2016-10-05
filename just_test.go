@@ -87,6 +87,20 @@ func TestThrowCatch(t *testing.T) {
 	})
 }
 
+func TestCatchNil(t *testing.T) {
+	var panicErr = func(err error) error {
+		panic(err)
+		return err
+	}
+	assert.NotPanics(t, func() {
+		defer CatchF(panicErr)(nil)
+	})
+	assert.Panics(t, func() {
+		defer CatchF(panicErr)(nil)
+		Throw(FakeErr)
+	})
+}
+
 func TestPrefixError(t *testing.T) {
 	for _, pre := range []string{"", "Hello", "World"} {
 		assert.Equal(t, pre+FakeErr.Error(), WithPrefix(pre)(FakeErr).Error())
