@@ -2,6 +2,7 @@ package just
 
 import "fmt"
 
+// _Err is a type of catchable error
 type _Err struct {
 	error
 }
@@ -83,6 +84,11 @@ func WithPrefix(pre string) func(error) error {
 		}
 		return &_PreErr{pre, err}
 	}
+}
+
+// TryTo is the same as TryF(WithPrefix(msg + ": "))
+func TryTo(msg string) func(interface{}, error) interface{} {
+	return TryF(WithPrefix(msg + ": "))
 }
 
 // ErrorWrapper is an error container. The internal error can be got

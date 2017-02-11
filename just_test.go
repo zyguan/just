@@ -2,6 +2,7 @@ package just
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -119,4 +120,12 @@ func TestPrefixError(t *testing.T) {
 		assert.Equal(t, pre+FakeErr.Error(), WithPrefix(pre)(FakeErr).Error())
 		assert.Equal(t, FakeErr, WithPrefix(pre)(FakeErr).(ErrorWrapper).Err())
 	}
+}
+
+func TestTryTo(t *testing.T) {
+	defer CatchF(func(err error) error {
+		assert.True(t, strings.HasPrefix(err.Error(), "call fail: "))
+		return nil
+	})(nil)
+	TryTo("call fail")(fail(0))
 }
