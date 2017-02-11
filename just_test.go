@@ -101,6 +101,19 @@ func TestCatchNil(t *testing.T) {
 	})
 }
 
+func TestDeepCatch(t *testing.T) {
+	defer CatchF(func(err error) error {
+		assert.Equal(t, err, FakeErr)
+		return nil
+	})(nil)
+	foo := func() {
+		// throw error in a func but not catch it
+		Throw(FakeErr)
+	}
+	foo()
+	assert.Fail(t, "shouldn't reach here")
+}
+
 func TestPrefixError(t *testing.T) {
 	for _, pre := range []string{"", "Hello", "World"} {
 		assert.Equal(t, pre+FakeErr.Error(), WithPrefix(pre)(FakeErr).Error())
