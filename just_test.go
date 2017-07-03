@@ -9,15 +9,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var UncatchableErr = fmt.Errorf("oops: %s error", "uncatchable")
-var CatchableErr = errors.New("should be catched")
+var errUncatchable = fmt.Errorf("oops: %s error", "uncatchable")
+var errCatchable = errors.New("should be catched")
 
 func ok(val int) (int, error) {
 	return val, nil
 }
 
 func fail(val int) (int, error) {
-	return 0, UncatchableErr
+	return 0, errUncatchable
 }
 
 func assertErr(t *testing.T, exp error, act error) {
@@ -71,7 +71,7 @@ func TestTryCatch(t *testing.T) {
 }
 
 func TestThrowCatch(t *testing.T) {
-	for _, a := range []interface{}{UncatchableErr, "anwser", 42} {
+	for _, a := range []interface{}{errUncatchable, "anwser", 42} {
 		assert.NotPanics(t, func() {
 			defer Catch(nil)
 			Throw(a)
@@ -87,32 +87,31 @@ func TestThrowCatch(t *testing.T) {
 	})
 	assert.NotPanics(t, func() {
 		defer Catch(nil)
-		panic(CatchableErr)
+		panic(errCatchable)
 	})
 }
 
 func TestCatchNil(t *testing.T) {
 	var panicErr = func(err error) error {
 		panic(err)
-		return err
 	}
 	assert.NotPanics(t, func() {
 		defer CatchF(panicErr)(nil)
 	})
 	assert.Panics(t, func() {
 		defer CatchF(panicErr)(nil)
-		Throw(UncatchableErr)
+		Throw(errUncatchable)
 	})
 }
 
 func TestCatchInnerError(t *testing.T) {
 	defer CatchF(func(err error) error {
-		assert.Equal(t, err.(WrappedCatcher).Cause(), UncatchableErr)
+		assert.Equal(t, err.(WrappedCatcher).Cause(), errUncatchable)
 		return nil
 	})(nil)
 	foo := func() {
 		// throw error in a func but not catch it
-		Throw(UncatchableErr)
+		Throw(errUncatchable)
 	}
 	foo()
 	assert.Fail(t, "shouldn't reach here")
@@ -120,10 +119,10 @@ func TestCatchInnerError(t *testing.T) {
 
 func TestWrapError(t *testing.T) {
 	for _, msg := range []string{"", "Hello", "World"} {
-		assert.Equal(t, msg+": "+UncatchableErr.Error(), Wrap(msg)(UncatchableErr).Error())
+		assert.Equal(t, msg+": "+errUncatchable.Error(), Wrap(msg)(errUncatchable).Error())
 		assert.Equal(t,
-			errors.Wrap(UncatchableErr, msg).(WrappedCatcher).Cause(),
-			Wrap(msg)(UncatchableErr).(WrappedCatcher).Cause())
+			errors.Wrap(errUncatchable, msg).(WrappedCatcher).Cause(),
+			Wrap(msg)(errUncatchable).(WrappedCatcher).Cause())
 	}
 }
 
@@ -137,7 +136,7 @@ func TestTryTo(t *testing.T) {
 
 func TestHandleAll(t *testing.T) {
 	defer HandleAll(func(err error) {
-		assert.Equal(t, CatchableErr, err)
+		assert.Equal(t, errCatchable, err)
 	})
-	Throw(CatchableErr)
+	Throw(errCatchable)
 }

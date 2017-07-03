@@ -13,7 +13,7 @@ func openall(fs []string) (cnt int, err error) {
 	for _, f := range fs {
 		fd := just.TryTo(fmt.Sprintf("open file #%d:'%s'", cnt, f))(os.Open(f)).(*os.File)
 		fmt.Printf("open %s as %#v\n", f, fd)
-		cnt += 1
+		cnt++
 	}
 	return cnt, nil
 }

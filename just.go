@@ -13,6 +13,7 @@ type Catcher interface {
 	StackTrace() errors.StackTrace
 }
 
+// WrappedCatcher is Catcher with an internal error
 type WrappedCatcher interface {
 	Catcher
 	Cause() error
