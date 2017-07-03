@@ -16,3 +16,5 @@ Just try:
 defer just.Catch(&err)
 ret := just.Try(f(...)).(A)
 ```
+
+See [openall](examples/openall/main.go) for a slightly complex example.

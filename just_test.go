@@ -1,21 +1,23 @@
 package just
 
 import (
-	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 
-var FakeErr = errors.New("fail")
+var errUncatchable = fmt.Errorf("oops: %s error", "uncatchable")
+var errCatchable = errors.New("should be catched")
 
 func ok(val int) (int, error) {
 	return val, nil
 }
 
 func fail(val int) (int, error) {
-	return 0, FakeErr
+	return 0, errUncatchable
 }
 
 func assertErr(t *testing.T, exp error, act error) {
@@ -44,9 +46,9 @@ func TestTryCatch(t *testing.T) {
 		v int
 	}{
 		{ok, id, 1},
-		{ok, WithPrefix("ok: "), 3},
+		{ok, Wrap("ok"), 3},
 		{fail, id, 2},
-		{fail, WithPrefix("fail: "), 4},
+		{fail, Wrap("fail"), 4},
 	} {
 		expVal, expErr := x.f(x.v)
 
@@ -69,56 +71,58 @@ func TestTryCatch(t *testing.T) {
 }
 
 func TestThrowCatch(t *testing.T) {
-	for _, a := range []interface{}{FakeErr, "anwser", 42} {
+	for _, a := range []interface{}{errUncatchable, "anwser", 42} {
 		assert.NotPanics(t, func() {
-			var err error
-			defer Catch(&err)
+			defer Catch(nil)
 			Throw(a)
 		})
 		assert.Panics(t, func() {
-			var err error
-			defer Catch(&err)
+			defer Catch(nil)
 			panic(a)
 		})
 	}
 	assert.NotPanics(t, func() {
-		var err error
-		defer Catch(&err)
+		defer Catch(nil)
 		Throwf("Life, the Universe and Everything: %d", 42)
+	})
+	assert.NotPanics(t, func() {
+		defer Catch(nil)
+		panic(errCatchable)
 	})
 }
 
 func TestCatchNil(t *testing.T) {
 	var panicErr = func(err error) error {
 		panic(err)
-		return err
 	}
 	assert.NotPanics(t, func() {
 		defer CatchF(panicErr)(nil)
 	})
 	assert.Panics(t, func() {
 		defer CatchF(panicErr)(nil)
-		Throw(FakeErr)
+		Throw(errUncatchable)
 	})
 }
 
-func TestDeepCatch(t *testing.T) {
+func TestCatchInnerError(t *testing.T) {
 	defer CatchF(func(err error) error {
-		assert.Equal(t, err, FakeErr)
+		assert.Equal(t, err.(WrappedCatcher).Cause(), errUncatchable)
 		return nil
 	})(nil)
 	foo := func() {
 		// throw error in a func but not catch it
-		Throw(FakeErr)
+		Throw(errUncatchable)
 	}
 	foo()
 	assert.Fail(t, "shouldn't reach here")
 }
 
-func TestPrefixError(t *testing.T) {
-	for _, pre := range []string{"", "Hello", "World"} {
-		assert.Equal(t, pre+FakeErr.Error(), WithPrefix(pre)(FakeErr).Error())
-		assert.Equal(t, FakeErr, WithPrefix(pre)(FakeErr).(ErrorWrapper).Err())
+func TestWrapError(t *testing.T) {
+	for _, msg := range []string{"", "Hello", "World"} {
+		assert.Equal(t, msg+": "+errUncatchable.Error(), Wrap(msg)(errUncatchable).Error())
+		assert.Equal(t,
+			errors.Wrap(errUncatchable, msg).(WrappedCatcher).Cause(),
+			Wrap(msg)(errUncatchable).(WrappedCatcher).Cause())
 	}
 }
 
@@ -128,4 +132,11 @@ func TestTryTo(t *testing.T) {
 		return nil
 	})(nil)
 	TryTo("call fail")(fail(0))
+}
+
+func TestHandleAll(t *testing.T) {
+	defer HandleAll(func(err error) {
+		assert.Equal(t, errCatchable, err)
+	})
+	Throw(errCatchable)
 }
