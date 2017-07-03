@@ -1,17 +1,28 @@
 package just
 
-import "fmt"
+import (
+	"fmt"
 
-// _Err is a type of catchable error
-type _Err struct {
-	error
+	"github.com/pkg/errors"
+)
+
+// Catcher is a type of catchable error
+type Catcher interface {
+	Error() string
+	Format(s fmt.State, verb rune)
+	StackTrace() errors.StackTrace
+}
+
+type WrappedCatcher interface {
+	Catcher
+	Cause() error
 }
 
 func doCatch(ptr *error, f func(error) error, r interface{}) {
 	switch r.(type) {
 	case nil:
-	case _Err:
-		err := f(r.(_Err).error)
+	case Catcher:
+		err := f(r.(Catcher))
 		if ptr != nil {
 			*ptr = err
 		}
@@ -31,11 +42,23 @@ func Catch(ptr *error) {
 	doCatch(ptr, id, recover())
 }
 
-// TryF returns a function which calls panic when an error occurs.
+// HandleAll deals with all catchable error.
+func HandleAll(handle func(err error)) {
+	doCatch(nil, func(err error) error {
+		handle(err)
+		return nil
+	}, recover())
+}
+
+// TryF returns a function which panics when an error occurs.
 func TryF(f func(error) error) func(interface{}, error) interface{} {
 	return func(val interface{}, err error) interface{} {
 		if err != nil {
-			panic(asErr(f(err)))
+			e := f(err)
+			if _, ok := e.(Catcher); ok {
+				panic(e)
+			}
+			panic(errors.WithStack(err))
 		}
 		return val
 	}
@@ -46,14 +69,19 @@ func Try(val interface{}, err error) interface{} {
 	return TryF(id)(val, err)
 }
 
-// Throw convert the argument to an catchable error and then panic it.
-func Throw(a interface{}) {
-	panic(asErr(a))
+// TryTo is the same as TryF(Wrap(msg)).
+func TryTo(msg string) func(interface{}, error) interface{} {
+	return TryF(Wrap(msg))
 }
 
-// Throwf just likes fmt.Errorf but panic the error directly.
+// Throw convert the argument to an catchable error and then panic it.
+func Throw(a interface{}) {
+	panic(catchable(a))
+}
+
+// Throwf just likes errors.Errorf but panic the error immediately.
 func Throwf(format string, a ...interface{}) {
-	panic(asErr(fmt.Errorf(format, a...)))
+	panic(errors.Errorf(format, a...))
 }
 
 // Error just returns its err argument.
@@ -61,47 +89,27 @@ func Error(_ interface{}, err error) error {
 	return err
 }
 
-func id(err error) error { return err }
-
-func asErr(a interface{}) _Err {
-	switch a.(type) {
-	case error:
-		return _Err{a.(error)}
-	case string:
-		return _Err{fmt.Errorf(a.(string))}
-	default:
-		return _Err{fmt.Errorf("%v", a)}
-	}
-}
-
-// WithPrefix returns an error mapper which prepends the prefix to a
-// given error. The error returned by the mapper is also an instance
-// of ErrorWrapper.
-func WithPrefix(pre string) func(error) error {
+// Wrap converts errors.Wrap to an error mapper.
+func Wrap(msg string) func(error) error {
 	return func(err error) error {
 		if err == nil {
 			return nil
 		}
-		return &_PreErr{pre, err}
+		return errors.Wrap(err, msg)
 	}
 }
 
-// TryTo is the same as TryF(WithPrefix(msg + ": "))
-func TryTo(msg string) func(interface{}, error) interface{} {
-	return TryF(WithPrefix(msg + ": "))
+func id(err error) error { return err }
+
+func catchable(a interface{}) Catcher {
+	switch a.(type) {
+	case Catcher:
+		return a.(Catcher)
+	case error:
+		return errors.WithStack(a.(error)).(Catcher)
+	case string:
+		return errors.New(a.(string)).(Catcher)
+	default:
+		return errors.Errorf("%v", a).(Catcher)
+	}
 }
-
-// ErrorWrapper is an error container. The internal error can be got
-// by Err().
-type ErrorWrapper interface {
-	Err() error
-}
-
-type _PreErr struct {
-	pre string
-	err error
-}
-
-func (e *_PreErr) Error() string { return e.pre + e.err.Error() }
-
-func (e *_PreErr) Err() error { return e.err }
