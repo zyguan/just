@@ -62,7 +62,7 @@ func (c *caught) Format(s fmt.State, verb rune) {
 		if s.Flag('+') {
 			fmt.Fprintf(s, "%+v", c.Why())
 			if len(c.msg) > 0 {
-				io.WriteString(s, "-- \n"+c.msg)
+				io.WriteString(s, "\n"+c.msg)
 			}
 			return
 		}
