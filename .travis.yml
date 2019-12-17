@@ -1,15 +1,5 @@
 language: go
 
 go:
-  - 1.6
-  - 1.7
-  - tip
-install:
-  - go get github.com/Masterminds/glide
-  - go get github.com/golang/lint/golint
-script:
-  - glide install
-  - GO15VENDOREXPERIMENT=1 go build .
-  - GO15VENDOREXPERIMENT=1 go test $(glide novendor)
-  - go vet $(glide novendor)
-  - golint $(glide novendor)
+  - '1.12'
+  - '1.13'

@@ -4,7 +4,11 @@
 Getting tired of keep writing following boilerplate code?
 
 ```go
-ret, err := f(...)
+a, err := f(...)
+if err != nil {
+    return nil, err
+}
+b, err := g(...)
 if err != nil {
     return nil, err
 }
@@ -13,8 +17,9 @@ if err != nil {
 Just try:
 
 ```go
-defer just.Catch(&err)
-ret := just.Try(f(...)).(A)
+defer just.Return(&err)
+a := just.Try(f(...)).Nth(0).(A)
+b := just.Try(g(...)).Nth(0).(B)
 ```
 
-See [openall](examples/openall/main.go) for a slightly complex example.
+See [print-json-files](examples/print-json-files/main.go) for a complete example.
