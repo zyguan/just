@@ -100,7 +100,7 @@ func TestThrowReturn(t *testing.T) {
 	})
 	assert.NotPanics(t, func() {
 		defer Return(nil)
-		panic(wrap(errors.New("another error")))
+		panic(AsCatchable(errors.New("another error")))
 	})
 }
 
@@ -118,8 +118,8 @@ func TestAnnotateAndReturn(t *testing.T) {
 func TestCatch(t *testing.T) {
 	for _, a := range []interface{}{errors.New("an error"), "a string", 42, 3.14} {
 		t.Run(fmt.Sprintf("catch %v", a), call(nil, func(e error) (err error) {
-			defer Catch(func(err error) {
-				assert.EqualError(t, err, fmt.Sprintf("%v", a))
+			defer Catch(func(c Catchable) {
+				assert.EqualError(t, c.Why(), fmt.Sprintf("%v", a))
 			})
 			Throw(a)
 			t.Fail()
@@ -131,8 +131,7 @@ func TestCatch(t *testing.T) {
 func TestCatchInnerError(t *testing.T) {
 	e := errors.New("oops")
 
-	defer Catch(func(err error) {
-		c := err.(Catchable)
+	defer Catch(func(c Catchable) {
 		assert.Equal(t, e, c.Why())
 	})
 
@@ -155,8 +154,8 @@ func TestTryTo(t *testing.T) {
 }
 
 func TestPanicInHandle(t *testing.T) {
-	var panicInHandle = func(err error) error {
-		panic(err)
+	var panicInHandle = func(c Catchable) error {
+		panic(c)
 	}
 	assert.NotPanics(t, func() {
 		defer HandleAndReturn(panicInHandle)(nil)
@@ -168,11 +167,19 @@ func TestPanicInHandle(t *testing.T) {
 }
 
 func TestAsCatchable(t *testing.T) {
-	c := wrap(errors.New("oops"))
-	assert.Equal(t, c, AsCatchable(c))
+	e := errors.New("oops")
+	c1 := AsCatchable(e)
+	assert.Equal(t, c1, AsCatchable(c1))
+	assert.EqualError(t, c1.Why(), e.Error())
 
-	assert.Error(t, AsCatchable(nil))
-	assert.Equal(t, nil, wrap(nil))
+	c2 := AsCatchable(c1, "some error")
+	assert.EqualError(t, c2.Why(), "some error: "+e.Error())
+
+	assert.Error(t, AsCatchable(nil).Why())
+
+	// Also test wrap
+	assert.Equal(t, nil, TraceFn(id).wrap(nil))
+	assert.Equal(t, e, TraceFn(func(_ error) error { return nil }).wrap(e).Why())
 }
 
 func TestNthValue(t *testing.T) {
@@ -209,13 +216,11 @@ func TestSetTraceFn(t *testing.T) {
 		error
 		info string
 	}
-	trace := func(err error) error {
+	SetTraceFn(func(err error) error {
 		return traced{err, "attached info"}
-	}
-	SetTraceFn(trace)
+	})
 	e := errors.New("oops")
-	c := wrap(e)
-	te := c.Why().(traced)
+	te := AsCatchable(e).Why().(traced)
 	assert.Equal(t, e, te.error)
 	assert.Equal(t, "attached info", te.info)
 }
