@@ -8,19 +8,19 @@ import (
 )
 
 func f() (err error) {
-	defer just.AnnotateAndReturn("defer annotation")(&err)
+	defer just.AnnotateAndReturn("some annotation")(&err)
 	just.Try(errors.New("oops"))
 	return
 }
 
 func main() {
 	zap.S().Info(f())
-	zap.S().Infof("%+v", f())
+	x := f()
+	zap.S().Infof("%+v", x)
 	zap.L().Error(">>>", zap.Error(f()))
 }
 
 func init() {
 	just.SetTraceFn(errors.Trace)
-	l, _ := zap.NewDevelopment()
-	zap.ReplaceGlobals(l)
+	zap.ReplaceGlobals(just.Try(zap.NewDevelopment()).(*zap.Logger))
 }

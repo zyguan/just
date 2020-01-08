@@ -36,37 +36,51 @@ func pcall(e error, f func(error) error, requireCatable bool) func(t *testing.T)
 	}
 }
 
+func TestFormatError(t *testing.T) {
+	e := func() (err error) {
+		defer AnnotateAndReturn("some annotation")(&err)
+		Try(errors.New("oops"))
+		return
+	}()
+	for _, v := range []string{"%v", "%s", "%q"} {
+		assert.Equal(t, "some annotation: oops", fmt.Sprintf(v, e))
+	}
+	assert.Equal(t, "oops\nsome annotation", fmt.Sprintf("%+v", e))
+}
+
 func TestTryReturn(t *testing.T) {
 	t.Run("return nil", call(nil, func(_ error) (err error) {
 		defer Return(&err)
-		Try(func() error { return nil }())
+		TryValues(func() error { return nil }())
 		return
 	}))
 	t.Run("return nil without catch", call(nil, func(e error) (err error) {
-		Try(func() error { return nil }())
+		TryValues(func() error { return nil }())
 		return
 	}))
 	t.Run("return err", call(errors.New("an error"), func(e error) (err error) {
 		defer Return(&err)
-		Try(func() error { return e }())
+		TryValues(func() error { return e }())
 		t.Fail()
 		return
 	}))
 	t.Run("return err without catch", pcall(errors.New("an error"), func(e error) (err error) {
-		Try(func() error { return e }())
+		TryValues(func() error { return e }())
 		t.Fail()
 		return
 	}, true))
 
+	answer := func() (int, error) { return 42, nil }
+
 	t.Run("return val and nil", call(nil, func(_ error) (err error) {
 		defer Return(&err)
-		res := Try(func() (int, error) { return 42, nil }())
-		assert.Equal(t, 42, res.Nth(0))
+		assert.Equal(t, 42, TryValues(answer()).Nth(0))
+		assert.Equal(t, 42, Try(answer()))
 		return
 	}))
 	t.Run("return val and nil without catch", call(nil, func(e error) (err error) {
-		res := Try(func() (int, error) { return 42, nil }())
-		assert.Equal(t, 42, res.Nth(0))
+		assert.Equal(t, 42, TryValues(answer()).Nth(0))
+		assert.Equal(t, 42, Try(answer()))
 		return
 	}))
 	t.Run("return val and err", call(errors.New("an error"), func(e error) (err error) {
@@ -76,7 +90,7 @@ func TestTryReturn(t *testing.T) {
 		return
 	}))
 	t.Run("return val and err without catch", pcall(errors.New("an error"), func(e error) (err error) {
-		Try(func() error { return e }())
+		TryValues(func() error { return e }())
 		t.Fail()
 		return
 	}, true))
@@ -141,6 +155,16 @@ func TestCatchInnerError(t *testing.T) {
 }
 
 func TestTryTo(t *testing.T) {
+	t.Run("try to call func return nil with msg", call(nil, func(e error) (err error) {
+		defer Return(&err)
+		TryValuesWithMsg("call func return nil")(func() error { return nil }())
+		return
+	}))
+	t.Run("try to call func return err with msg", call(errors.New("call func return err: oops"), func(e error) (err error) {
+		defer Return(&err)
+		TryValuesWithMsg("call func return err")(func() error { return errors.New("oops") }())
+		return
+	}))
 	t.Run("try to call func return nil", call(nil, func(e error) (err error) {
 		defer Return(&err)
 		TryTo("call func return nil")(func() error { return nil }())
@@ -179,11 +203,11 @@ func TestAsCatchable(t *testing.T) {
 
 	// Also test wrap
 	assert.Equal(t, nil, TraceFn(id).wrap(nil))
-	assert.Equal(t, e, TraceFn(func(_ error) error { return nil }).wrap(e).Why())
+	assert.Nil(t, TraceFn(func(_ error) error { return nil }).wrap(e))
 }
 
 func TestNthValue(t *testing.T) {
-	xs := Try(1, 2, 3)
+	xs := TryValues(1, 2, 3)
 	for i := -len(xs); i < len(xs); i++ {
 		assert.NotNil(t, xs.Nth(i))
 	}
@@ -225,10 +249,37 @@ func TestSetTraceFn(t *testing.T) {
 	assert.Equal(t, "attached info", te.info)
 }
 
+type tt struct {
+	t      *testing.T
+	msg    string
+	failed bool
+}
+
+func (t *tt) FailNow() { t.failed = true }
+func (t *tt) Errorf(format string, args ...interface{}) {
+	assert.Equal(t.t, t.msg, fmt.Sprintf(format, args...))
+}
+
+func TestAssert(t *testing.T) {
+	Assert(t).Try(nil)
+
+	v := &tt{t: t, msg: "some error"}
+	Assert(v).Try(errors.New("some error"))
+	assert.True(t, v.failed)
+
+	Assert(t, func(err error, msgAndArgs ...interface{}) {
+		assert.Nil(t, err)
+	}).Try(nil)
+
+	Assert(t, func(err error, msgAndArgs ...interface{}) {
+		assert.EqualError(t, err, "some error")
+	}).Try(errors.New("some error"))
+}
+
 func BenchmarkJust(b *testing.B) {
 	f := func() (err error) {
 		defer Return(&err)
-		x := Try(benchFn()).Nth(0).(float64)
+		x := Try(benchFn()).(float64)
 		x += 1
 		return
 	}

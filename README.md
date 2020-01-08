@@ -18,8 +18,8 @@ Just try:
 
 ```go
 defer just.Return(&err)
-a := just.Try(f(...)).Nth(0).(A)
-b := just.Try(g(...)).Nth(0).(B)
+a := just.Try(f(...)).(A)
+b := just.Try(g(...)).(B)
 ```
 
 See [print-json-files](examples/print-json-files/main.go) for a complete example.
