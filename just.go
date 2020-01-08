@@ -11,42 +11,48 @@ type Catchable interface {
 	Why() error
 }
 
-type caught struct {
-	err error
-	msg string
+type caught struct{ err error }
+
+type withStack interface {
+	HasStack() bool
 }
 
-func (c *caught) Why() error {
-	if len(c.msg) > 0 {
-		return c
+type wrappedErr struct {
+	msg       string
+	err       error
+	withStack bool
+}
+
+func wrap(err error, msg string) error {
+	if len(msg) == 0 {
+		return err
 	}
-	return c.err
+	e := wrappedErr{msg: msg, err: err}
+	_, e.withStack = err.(withStack)
+	return &e
 }
 
-func (c *caught) Cause() error { return c.err }
+func (e *wrappedErr) Error() string { return e.msg + ": " + e.err.Error() }
 
-func (c *caught) Error() string {
-	if len(c.msg) == 0 {
-		return c.err.Error()
-	}
-	return c.msg + ": " + c.err.Error()
-}
+func (e *wrappedErr) Cause() error { return e.err }
 
-func (c *caught) Format(s fmt.State, verb rune) {
+func (e *wrappedErr) HasStack() bool { return e.withStack }
+
+func (e *wrappedErr) Format(s fmt.State, verb rune) {
 	switch verb {
 	case 'v':
 		if s.Flag('+') {
-			fmt.Fprintf(s, "%+v", c.Why())
-			if len(c.msg) > 0 {
-				io.WriteString(s, "\n"+c.msg)
-			}
+			fmt.Fprintf(s, "%+v\n", e.Cause())
+			io.WriteString(s, e.msg)
 			return
 		}
 		fallthrough
 	case 's', 'q':
-		io.WriteString(s, c.Error())
+		io.WriteString(s, e.Error())
 	}
 }
+
+func (c *caught) Why() error { return c.err }
 
 func Return(ptr *error) {
 	HandleRecovered(ptr, func(c Catchable) error { return c.Why() }, recover())
@@ -57,7 +63,7 @@ func HandleAndReturn(handle func(Catchable) error) func(*error) {
 }
 
 func AnnotateAndReturn(msg string) func(*error) {
-	return HandleAndReturn(func(c Catchable) error { return &caught{c.Why(), msg} })
+	return HandleAndReturn(func(c Catchable) error { return wrap(c.Why(), msg) })
 }
 
 func Catch(handle func(c Catchable)) {
@@ -107,9 +113,31 @@ func AsCatchable(a interface{}, optMsgs ...string) Catchable {
 	return trace.AsCatchable(a, optMsgs...)
 }
 
-func Try(xs ...interface{}) Values { return trace.Try(xs...) }
+func Try(xs ...interface{}) interface{} { return trace.Try(xs...).Nth(0) }
 
-func TryTo(msg string) func(...interface{}) Values { return trace.TryTo(msg) }
+func TryTo(msg string) func(...interface{}) interface{} {
+	return func(xs ...interface{}) interface{} {
+		if err := ExtractError(xs...); err != nil {
+			if c := trace.wrap(err, msg); c != nil {
+				panic(c)
+			}
+		}
+		return Values(xs).Nth(0)
+	}
+}
+
+func TryValues(xs ...interface{}) Values { return trace.Try(xs...) }
+
+func TryValuesWithMsg(msg string) func(...interface{}) Values {
+	return func(xs ...interface{}) Values {
+		if err := ExtractError(xs...); err != nil {
+			if c := trace.wrap(err, msg); c != nil {
+				panic(c)
+			}
+		}
+		return xs
+	}
+}
 
 func Throw(a interface{}) { trace.Throw(a) }
 
@@ -121,25 +149,27 @@ func (f TraceFn) wrap(err error, optMsgs ...string) Catchable {
 	if err == nil {
 		return nil
 	}
-	msg := strings.Join(optMsgs, ": ")
 	tracedErr := f(err)
 	if tracedErr == nil {
-		tracedErr = err
+		return nil
 	}
-	return &caught{tracedErr, msg}
+	if len(optMsgs) == 0 {
+		return &caught{tracedErr}
+	}
+	return &caught{wrap(err, strings.Join(optMsgs, ": "))}
 }
 
 func (f TraceFn) AsCatchable(a interface{}, optMsgs ...string) Catchable {
-	switch e := a.(type) {
+	switch x := a.(type) {
 	case Catchable:
 		if len(optMsgs) == 0 {
-			return e
+			return x
 		}
-		return &caught{e.Why(), strings.Join(optMsgs, ": ")}
+		return &caught{wrap(x.Why(), strings.Join(optMsgs, ": "))}
 	case error:
-		return f.wrap(e, optMsgs...)
+		return f.wrap(x, optMsgs...)
 	case string:
-		return f.wrap(errors.New(e), optMsgs...)
+		return f.wrap(errors.New(x), optMsgs...)
 	default:
 		return f.wrap(fmt.Errorf("%v", a), optMsgs...)
 	}
@@ -147,18 +177,11 @@ func (f TraceFn) AsCatchable(a interface{}, optMsgs ...string) Catchable {
 
 func (f TraceFn) Try(xs ...interface{}) Values {
 	if err := ExtractError(xs...); err != nil {
-		panic(f.wrap(err))
+		if c := f.wrap(err); c != nil {
+			panic(c)
+		}
 	}
 	return xs
-}
-
-func (f TraceFn) TryTo(msg string) func(...interface{}) Values {
-	return func(xs ...interface{}) Values {
-		if err := ExtractError(xs...); err != nil {
-			panic(f.wrap(err, msg))
-		}
-		return xs
-	}
 }
 
 func (f TraceFn) Throw(a interface{}) { panic(f.AsCatchable(a)) }
