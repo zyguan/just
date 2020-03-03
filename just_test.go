@@ -206,6 +206,12 @@ func TestAsCatchable(t *testing.T) {
 	assert.Nil(t, TraceFn(func(_ error) error { return nil }).wrap(e))
 }
 
+func TestPack(t *testing.T) {
+	assert.Nil(t, Pack().Error())
+	assert.Nil(t, Pack(nil).Error())
+	assert.NotNil(t, Pack(errors.New("oops")).Error())
+}
+
 func TestNthValue(t *testing.T) {
 	xs := TryValues(1, 2, 3)
 	for i := -len(xs); i < len(xs); i++ {
@@ -247,33 +253,6 @@ func TestSetTraceFn(t *testing.T) {
 	te := AsCatchable(e).Why().(traced)
 	assert.Equal(t, e, te.error)
 	assert.Equal(t, "attached info", te.info)
-}
-
-type tt struct {
-	t      *testing.T
-	msg    string
-	failed bool
-}
-
-func (t *tt) FailNow() { t.failed = true }
-func (t *tt) Errorf(format string, args ...interface{}) {
-	assert.Equal(t.t, t.msg, fmt.Sprintf(format, args...))
-}
-
-func TestAssert(t *testing.T) {
-	Assert(t).Try(nil)
-
-	v := &tt{t: t, msg: "some error"}
-	Assert(v).Try(errors.New("some error"))
-	assert.True(t, v.failed)
-
-	Assert(t, func(err error, msgAndArgs ...interface{}) {
-		assert.Nil(t, err)
-	}).Try(nil)
-
-	Assert(t, func(err error, msgAndArgs ...interface{}) {
-		assert.EqualError(t, err, "some error")
-	}).Try(errors.New("some error"))
 }
 
 func BenchmarkJust(b *testing.B) {

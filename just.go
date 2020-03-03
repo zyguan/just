@@ -88,7 +88,9 @@ func HandleRecovered(ptr *error, handle func(Catchable) error, recovered interfa
 
 type Values []interface{}
 
-func (xs Values) Error() error { return ExtractError(xs) }
+func Pack(xs ...interface{}) Values { return xs }
+
+func (xs Values) Error() error { return ExtractError(xs...) }
 
 func (xs Values) Nth(i int) interface{} {
 	if i < 0 {
@@ -188,6 +190,8 @@ func (f TraceFn) Throw(a interface{}) { panic(f.AsCatchable(a)) }
 
 func (f TraceFn) Throwf(format string, args ...interface{}) { f.Throw(fmt.Errorf(format, args...)) }
 
+func (f TraceFn) Errorf(format string, args ...interface{}) { f.Throwf(format, args...) }
+
 var trace TraceFn = id
 
 func id(err error) error { return err }
@@ -197,28 +201,4 @@ func SetTraceFn(f func(error) error) {
 		f = id
 	}
 	trace = f
-}
-
-type TestingT interface {
-	Errorf(format string, args ...interface{})
-	FailNow()
-}
-
-type ErrorAssertion func(err error, msgAndArgs ...interface{})
-
-func Assert(t TestingT, optErrAssertions ...ErrorAssertion) TraceFn {
-	if len(optErrAssertions) == 0 {
-		optErrAssertions = append(optErrAssertions, func(err error, msgAndArgs ...interface{}) {
-			if err != nil {
-				t.Errorf("%+v", err)
-				t.FailNow()
-			}
-		})
-	}
-	return func(e error) error {
-		for _, assert := range optErrAssertions {
-			assert(e, e.Error())
-		}
-		return nil
-	}
 }
