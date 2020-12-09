@@ -13,6 +13,10 @@ type Catchable interface {
 
 type caught struct{ err error }
 
+func (c *caught) Why() error { return c.err }
+
+func (c *caught) String() string { return c.err.Error() }
+
 type withStack interface {
 	HasStack() bool
 }
@@ -51,8 +55,6 @@ func (e *wrappedErr) Format(s fmt.State, verb rune) {
 		io.WriteString(s, e.Error())
 	}
 }
-
-func (c *caught) Why() error { return c.err }
 
 func Return(ptr *error) {
 	HandleRecovered(ptr, func(c Catchable) error { return c.Why() }, recover())
